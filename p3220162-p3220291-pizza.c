@@ -7,6 +7,7 @@
 #include <time.h>
 #include <stdarg.h>
 #include <errno.h>
+#include <limits.h>
 
 pthread_t *threads = NULL;
 unsigned int *ids = NULL;
@@ -315,19 +316,26 @@ int main(int argc, char *argv[])
     
     char* p;
     errno = 0; 
-    long N = strtol(argv[1], &p, 10);
-    if (*p != '\0' ||  errno != 0) {
+    long lN = strtol(argv[1], &p, 10);
+    if (*p != '\0' ||  errno != 0) 
+    {
         return -1;
     }
-    long seed = strtol(argv[1], &p, 10);
-    if (*p != '\0' ||  errno != 0) {
+    long lseed = strtol(argv[2], &p, 10);
+    if (*p != '\0' ||  errno != 0) 
+    {
         return -1;
     }
-
-    //int N = atoi(argv[1]);
-    //seed = atoi(argv[2]);
+	if (lN < INT_MIN || lN > INT_MAX || lseed < 0 || lseed > UINT_MAX) 
+	{
+        return -1;
+    }
+    int N = (int) lN;
+    seed = (uint) lseed;
+    
     threads = malloc(N * sizeof(pthread_t));
     mainThreadId = pthread_self();
+    
     if (threads == NULL)
     {
         printf("ERROR: Malloc failed not enough memory!\n");
