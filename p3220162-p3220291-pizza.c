@@ -9,6 +9,10 @@
 #include <errno.h>
 #include <limits.h>
 
+static pthread_key_t* keys;
+static int N;
+static int* threadDone;
+
 pthread_t *threads = NULL;
 unsigned int *ids = NULL;
 int mainThreadId;
@@ -52,6 +56,7 @@ void checkRCAndExitThread(unsigned int id, unsigned int *selectedPizzaTypes, con
 void checkRCAndExitProcess(const char *type, int rc);
 void threadSafePrintf(unsigned int id, unsigned int *selectedPizzaTypes, const char *format, ...);
 void freeMainResources();
+static void destructor(void *memoryToFree);
 
 void *customer(void *x)
 {
@@ -84,7 +89,7 @@ void *customer(void *x)
 
     int totalPizzas = rand_r(&tSeed) % N_orderHigh + N_orderLow;
     selectedPizzaTypes = (unsigned int *)malloc(totalPizzas * sizeof(int));
-    
+    pthread_setspecific(keys[id], selectedPizzaTypes);
     if (selectedPizzaTypes == NULL)
     {
         printf("ERROR: Malloc failed not enough memory!\n");
@@ -138,7 +143,6 @@ void *customer(void *x)
     	checkRCAndExitThread(id, selectedPizzaTypes, "pthread_cond_signal", pthread_cond_signal(&telOperatorCond));
     	checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_unlock", pthread_mutex_unlock(&telOperatorMtx));
 
-    	free(selectedPizzaTypes);
     	pthread_exit(NULL);
     }
 
@@ -173,7 +177,7 @@ void *customer(void *x)
     checkRCAndExitThread(id, selectedPizzaTypes, "pthread_cond_signal", pthread_cond_signal(&cookCond));
     checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_unlock", pthread_mutex_unlock(&cookMtx));
     
-	sleep(10);
+	sleep(T_bake);
 	clock_gettime(CLOCK_REALTIME, &start);
 
 	checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_lock", pthread_mutex_lock(&delivererMtx));
@@ -215,8 +219,6 @@ void *customer(void *x)
     availableDeliverer += 1;
     checkRCAndExitThread(id, selectedPizzaTypes, "pthread_cond_signal", pthread_cond_signal(&delivererCond));
     checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_unlock", pthread_mutex_unlock(&delivererMtx));
-
-    free(selectedPizzaTypes);
     pthread_exit(NULL);
 }
 
@@ -229,7 +231,8 @@ void checkRCAndExitThread(unsigned int id, unsigned int *memoryToFree, const cha
         pthread_mutex_unlock(&printMtx);
         if(memoryToFree!=NULL)
         {
-              free(memoryToFree);
+        	//	printf("========= FREE IN CHECK\n");
+          //    free(memoryToFree);
         }  
         pthread_exit(&id); // unlocks a mutex automatically? https://linux.die.net/man/3/pthread_cleanup_push
         					// cast to void was giving warning
@@ -302,9 +305,30 @@ void checkRCAndExitProcess(const char *type, int rc)
 
 void freeMainResources()
 {
+	printf ("======= FREE FROM MAIN\n");
+	for (int i = 0; i < N; i++)
+    {
+ 		if (threadDone[i] == 1) continue;
+    	
+    	pthread_cancel(threads[i]);
+        checkRCAndExitProcess("pthread_join", pthread_join(threads[i], NULL));
+    }
     free(threads);
     free(ids);
 }
+
+static void destructor(void *memoryToFree)
+{
+	//int *id = (int*) arg;
+	//threadSafePrintf();
+	printf("IN\n");
+	if(memoryToFree!=NULL)
+	{
+		printf ("======= FREE FROM DESTRUCT\n");
+		free(memoryToFree);
+		printf("OK\n");
+	}
+}	
 
 int main(int argc, char *argv[])
 {
@@ -330,7 +354,7 @@ int main(int argc, char *argv[])
 	{
         return -1;
     }
-    int N = (int) lN;
+    N = (int) lN;
     seed = (uint) lseed;
     
     threads = malloc(N * sizeof(pthread_t));
@@ -362,17 +386,25 @@ int main(int argc, char *argv[])
 	checkRCAndExitProcess("pthread_cond_init", pthread_cond_init(&delivererCond, NULL));
 	checkRCAndExitProcess("pthread_mutex_init", pthread_mutex_init(&totalCoolingMtx, NULL));
 	
+	keys = malloc (N*sizeof(pthread_key_t));
+	threadDone = malloc(N*sizeof(int));
+	
     for (int i = 0; i < N; i++)
     {
         ids[i] = i + 1;
+        threadDone[i] = 0;
         threadSafePrintf(mainThreadId, NULL, "Main: Thread Creation %d\n", i + 1);
+        pthread_key_create(&keys[i], destructor);
         checkRCAndExitProcess("pthread_create", pthread_create(&threads[i], NULL, customer, &ids[i]));
     }
+
     for (int i = 0; i < N; i++)
     {
+
         checkRCAndExitProcess("pthread_join", pthread_join(threads[i], NULL));
+        threadDone[i] = 1;
     }
-    
+
     printf("\nTotal Revenue: %d\n", totalRevenue);
 	printf("Pizzas sold\nmargarita: %d\npeperoni: %d\nspecial: %d\n", pizzaSellings[0], pizzaSellings[1], pizzaSellings[2]);
 	if (totalSucOrders>0 )
