@@ -8,7 +8,7 @@
 #include <stdarg.h>
 #include <errno.h>
 #include <limits.h>
-
+// #define EXTRA_DEBUG
 // static pthread_key_t* keys;
 static int N;
 static int *threadStatus; //-1 thread not created, 0 threadCreated, 1 threadDestroyed
@@ -73,11 +73,13 @@ typedef struct destructorArgs
 void *customer(void *x)
 {
     DESTRUCTOR_ARGS destructorArgs;
-    struct timespec startTime, currentTime;
-    clock_gettime(CLOCK_REALTIME, &startTime);
+    struct timespec threadStartTime, callTime, bakeFinishTime, currentTime;
+    clock_gettime(CLOCK_REALTIME, &threadStartTime);
     unsigned int *selectedPizzaTypes = NULL;
     unsigned int id = *(unsigned int *)x;
     unsigned int tSeed = seed * id;
+    long interval = 0;
+    long timeSinceStart = 0;
     destructorArgs.id = id;
 
 /*====Start=======The first customer calls at time 0, and each subsequent customer calls after a random integer interval======*/ 
@@ -87,7 +89,10 @@ void *customer(void *x)
         pthread_cleanup_push(cleanupUnlockMutex, (void *)&waitPreviousCustomerCallMtx);
         while (waitForPreviousCustomerCall == 1)
         {
+            #ifdef EXTRA_DEBUG
             threadSafePrintf(id, selectedPizzaTypes, "Customer %d waiting for the previous customer to call. Blocked...\n", id);
+            #endif
+
             checkRCAndExitThread(id, selectedPizzaTypes, "pthread_cond_wait", pthread_cond_wait(&waitPreviousCustomerCond, &waitPreviousCustomerCallMtx));
         }
         waitForPreviousCustomerCall = 1;       
@@ -95,9 +100,13 @@ void *customer(void *x)
         checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_unlock", pthread_mutex_unlock(&waitPreviousCustomerCallMtx));
 
         int randCallTime = rand_r(&tSeed) % T_orderHigh + T_orderLow;
+        
+        #ifdef EXTRA_DEBUG
         clock_gettime(CLOCK_REALTIME, &currentTime);
-        long interval = currentTime.tv_sec - startTime.tv_sec;
-        threadSafePrintf(id, selectedPizzaTypes, "Customer %d will call after %d minutes. [Time:%ld minute(s)]\n", id, randCallTime, interval);
+        timeSinceStart = currentTime.tv_sec - threadStartTime.tv_sec;      
+        threadSafePrintf(id, selectedPizzaTypes, "Customer %d will call after %d minutes. [Time:%ld minute(s)]\n", id, randCallTime, timeSinceStart);
+        #endif
+
         sleep(randCallTime);
 
         checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_lock", pthread_mutex_lock(&waitPreviousCustomerCallMtx));
@@ -107,10 +116,13 @@ void *customer(void *x)
         pthread_cleanup_pop(0);
         checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_unlock", pthread_mutex_unlock(&waitPreviousCustomerCallMtx));   
     }
-
+    #ifdef EXTRA_DEBUG
     clock_gettime(CLOCK_REALTIME, &currentTime);
-    long interval = currentTime.tv_sec - startTime.tv_sec;
-    threadSafePrintf(id, selectedPizzaTypes, "Customer %d is Calling [Time:%ld minute(s)]\n", id, interval);
+    timeSinceStart = currentTime.tv_sec - threadStartTime.tv_sec;  
+    threadSafePrintf(id, selectedPizzaTypes, "Customer %d is Calling [Time:%ld minute(s)]\n", id, timeSinceStart);
+    #endif
+    
+    clock_gettime(CLOCK_REALTIME, &callTime);
  //====END=======The first customer calls at time 0, and each subsequent customer calls after a random integer interval======
 
 // =====START===When all phone operators are busy, the customer waits for the next available phone operator==================
@@ -118,10 +130,15 @@ void *customer(void *x)
     pthread_cleanup_push(cleanupUnlockMutex, (void *)&telOperatorMtx);
     while (availableTelOperator == 0)
     {
+        #ifdef EXTRA_DEBUG
         threadSafePrintf(id, selectedPizzaTypes, "Customer %d didn't find available Operator. Blocked...\n", id);
+        #endif
         checkRCAndExitThread(id, selectedPizzaTypes, "pthread_cond_wait", pthread_cond_wait(&telOperatorCond, &telOperatorMtx));
     }
+    #ifdef EXTRA_DEBUG
     threadSafePrintf(id, selectedPizzaTypes, "Customer %d is Ordering.\n", id);
+    #endif
+
     availableTelOperator--;
     totalOrders += 1;
     pthread_cleanup_pop(0);
@@ -129,7 +146,7 @@ void *customer(void *x)
 // ====END===When all phone operators are busy, the customer waits for the next available phone operator==================
 
 
-// ===START===When a customer connects to an operator, they select a random integer number of pizzas======================
+// ===START===When a customer connects to an operator, they select a random integer number of pizzas and Type======================
     int totalPizzas = rand_r(&tSeed) % N_orderHigh + N_orderLow;
     selectedPizzaTypes = (unsigned int *)malloc(totalPizzas * sizeof(int));
 
@@ -143,7 +160,7 @@ void *customer(void *x)
     destructorArgs.memoryToFree = selectedPizzaTypes;
     pthread_cleanup_push(destructor, &destructorArgs);
     randomlySelectPizzaCountAndType(id, tSeed, totalPizzas, selectedPizzaTypes);
-// ===END===When a customer connects to an operator, they select a random integer number of pizzas====
+// ===END===When a customer connects to an operator, they select a random integer number of pizzas and Type====
 
 
 // ===START===The operator needs a random number of minutes to charge the customer's credit card=====
@@ -151,7 +168,8 @@ void *customer(void *x)
     sleep(randCardProccessingTime);
 
     clock_gettime(CLOCK_REALTIME, &currentTime);
-    long interval = currentTime.tv_sec - startTime.tv_sec;
+    long timeSinceStart = currentTime.tv_sec - threadStartTime.tv_sec;
+    
 // ===END===The operator needs a random number of minutes to charge the customer's credit card=====
 
 
@@ -160,7 +178,7 @@ void *customer(void *x)
     double randFail = (double)rand_r(&tSeed) / RAND_MAX;
     if (randFail >= P_fail)
     {
-        threadSafePrintf(id, selectedPizzaTypes, "Order number %d has been Placed![%ld minute(s)] \n", id, interval);
+        threadSafePrintf(id, selectedPizzaTypes, "Order number %d has been Placed![Time: %ld minute(s)] \n", id, timeSinceStart);
         checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_lock", pthread_mutex_lock(&totalRevenueMtx));
         pthread_cleanup_push(cleanupUnlockMutex, (void *)&totalRevenueMtx);
         totalSucOrders += 1;
@@ -182,17 +200,13 @@ void *customer(void *x)
                 pizzaSellings[2] += 1;
             }
         }
-        totalTimeOrdering += interval;
-        if (interval > maxTimeOrdering)
-        {
-            maxTimeOrdering = interval;
-        }
+        
         pthread_cleanup_pop(0);
         checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_lock", pthread_mutex_unlock(&totalRevenueMtx));
     }
     else
     {
-        threadSafePrintf(id, selectedPizzaTypes, "Order number %d order failed![%ld minute(s)] \n", id, interval);
+        threadSafePrintf(id, selectedPizzaTypes, "Order number %d order failed![Time: %ld minute(s)] \n", id, timeSinceStart);
         checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_lock", pthread_mutex_lock(&telOperatorMtx));
         pthread_cleanup_push(cleanupUnlockMutex, (void *)&telOperatorMtx);
         availableTelOperator++;
@@ -217,10 +231,15 @@ void *customer(void *x)
     pthread_cleanup_push(cleanupUnlockMutex, (void *)&cookMtx);
     while (availableCook < 0)
     {
+        #ifdef EXTRA_DEBUG
         threadSafePrintf(id, selectedPizzaTypes, "Order %d didn't find any preparer. Waiting...\n", id);
+        #endif
         checkRCAndExitThread(id, selectedPizzaTypes, "pthread_cond_wait", pthread_cond_wait(&cookCond, &cookMtx));
     }
+    #ifdef EXTRA_DEBUG
     threadSafePrintf(id, selectedPizzaTypes, "Order %d is being prepared.\n", id);
+    #endif
+
     availableCook -= 1;
     pthread_cleanup_pop(0);
     checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_unlock", pthread_mutex_unlock(&cookMtx));
@@ -230,10 +249,15 @@ void *customer(void *x)
     pthread_cleanup_push(cleanupUnlockMutex, (void *)&ovenMtx);
     while (availableOven < totalPizzas)
     {
+        #ifdef EXTRA_DEBUG
         threadSafePrintf(id, selectedPizzaTypes, "Order %d didn't find enough ovens. Waiting...\n", id);
+        #endif
+
         checkRCAndExitThread(id, selectedPizzaTypes, "pthread_cond_wait", pthread_cond_wait(&ovenCond, &ovenMtx));
     }
+    #ifdef EXTRA_DEBUG
     threadSafePrintf(id, selectedPizzaTypes, "Order %d is in Oven.\n", id);
+    #endif
     availableOven -= totalPizzas;
     pthread_cleanup_pop(0);
     checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_unlock", pthread_mutex_unlock(&ovenMtx));
@@ -246,16 +270,22 @@ void *customer(void *x)
     checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_unlock", pthread_mutex_unlock(&cookMtx));
 
     sleep(T_bake);
-    clock_gettime(CLOCK_REALTIME, &startTime);
+    clock_gettime(CLOCK_REALTIME, &bakeFinishTime);
 
     checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_lock", pthread_mutex_lock(&delivererMtx));
     pthread_cleanup_push(cleanupUnlockMutex, (void *)&delivererMtx);
     while (availableDeliverer < 0)
     {
+        #ifdef EXTRA_DEBUG
         threadSafePrintf(id, selectedPizzaTypes, "Order %d can't get a deliverer. Waiting...\n", id);
+        #endif
+
         checkRCAndExitThread(id, selectedPizzaTypes, "pthread_cond_wait", pthread_cond_wait(&delivererCond, &delivererMtx));
     }
+    #ifdef EXTRA_DEBUG
     threadSafePrintf(id, selectedPizzaTypes, "Order %d is being packed.\n", id);
+    #endif
+
     availableDeliverer -= 1;
     pthread_cleanup_pop(0);
     checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_unlock", pthread_mutex_unlock(&delivererMtx));
@@ -268,15 +298,20 @@ void *customer(void *x)
     checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_unlock", pthread_mutex_unlock(&ovenMtx));
 
     sleep(T_pack * totalPizzas);
+    clock_gettime(CLOCK_REALTIME, &currentTime);
+    int XcallToPack = currentTime.tv_sec - callTime.tv_sec;
+    timeSinceStart = currentTime.tv_sec - threadStartTime.tv_sec;
+    threadSafePrintf(id, selectedPizzaTypes, "Order %d was ready in %ld minute(s).[Time: %ld minute(s)].\n", id, XcallToPack, timeSinceStart);
 
-    threadSafePrintf(id, selectedPizzaTypes, "Order %d is being delivered.\n", id);
     int randDeliveringTime = rand_r(&tSeed) % (T_delHigh - T_delLow + 1) + T_delLow;
     sleep(randDeliveringTime);
 
     clock_gettime(CLOCK_REALTIME, &currentTime);
-    interval = currentTime.tv_sec - startTime.tv_sec;
-
-    threadSafePrintf(id, selectedPizzaTypes, "Order %d was given to customer.[%ld minute(s)]\n", id, interval);
+    timeSinceStart = currentTime.tv_sec - threadStartTime.tv_sec;
+    interval = currentTime.tv_sec - bakeFinishTime.tv_sec;
+    int YcallToDelivery = currentTime.tv_sec - callTime.tv_sec;
+    
+    threadSafePrintf(id, selectedPizzaTypes, "Order %d was delivered in %ld minute(s).[Time: %ld minute(s)]\n", id, YcallToDelivery, timeSinceStart);
     checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_lock", pthread_mutex_lock(&totalCoolingMtx));
     pthread_cleanup_push(cleanupUnlockMutex, (void *)&totalCoolingMtx);
     totalTimeCooling += interval;
@@ -285,11 +320,19 @@ void *customer(void *x)
         maxTimeCooling = interval;
     }
 
+    totalTimeOrdering += YcallToDelivery;
+    if (YcallToDelivery > maxTimeOrdering)
+    {
+        maxTimeOrdering = YcallToDelivery;
+    }
     pthread_cleanup_pop(0);
     checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_unlock", pthread_mutex_unlock(&totalCoolingMtx));
 
     sleep(randDeliveringTime);
+    #ifdef EXTRA_DEBUG
     threadSafePrintf(id, selectedPizzaTypes, "Delivery boy from order %d has returned.\n", id);
+    #endif
+
     checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_lock", pthread_mutex_lock(&delivererMtx));
     pthread_cleanup_push(cleanupUnlockMutex, (void *)&delivererMtx);
     availableDeliverer += 1;
@@ -333,7 +376,10 @@ void randomlySelectPizzaCountAndType(unsigned int id, unsigned int tSeed, unsign
     {
         double randDecimal = (double)rand_r(&tSeed) / RAND_MAX;
         selectedPizzaTypes[i] = weightedProbability(randDecimal, availablePizzaTypes, 3);
+
+        #ifdef EXTRA_DEBUG
         threadSafePrintf(id, selectedPizzaTypes, "Customer %d chose a %s\n", id, PizzaNames[selectedPizzaTypes[i]]);
+        #endif
     }
 }
 
@@ -368,11 +414,17 @@ void checkRCAndExitProcess(const char *type, int rc)
 
 void cancelThreads()
 {
+    #ifdef EXTRA_DEBUG
     printf("======= MAIN Cancels threads ======= \n");
+    #endif
+
     void *status = NULL;
     for (int i = 0; i < N; i++)
-    {
+    {   
+        #ifdef EXTRA_DEBUG
         printf("Thread id %d status %d\n",i+1, threadStatus[i]);
+        #endif
+
         if (threadStatus[i] == 0) // if is created
         {
             pthread_cancel(threads[i]);
@@ -385,6 +437,7 @@ void cancelThreads()
         {
             checkRCAndExitProcess("pthread_join", pthread_join(threads[i], &status));
 
+            #ifdef EXTRA_DEBUG
             if (status == PTHREAD_CANCELED)
             {
                 printf("main(): thread %d was canceled\n", ids[i]);
@@ -393,6 +446,7 @@ void cancelThreads()
             {
                 printf("main(): thread %d wasn't canceled)\n", ids[i]);
             } // maybe it has already finished
+            #endif
         }
     }
 
@@ -401,7 +455,10 @@ void cancelThreads()
 
 void freeMainResources()
 {
+    #ifdef EXTRA_DEBUG
     printf("Freeing main resources\n");
+    #endif
+
     free(threadStatus);
     free(threads);
     free(ids);
@@ -423,13 +480,22 @@ void checkRCAndExitThread(unsigned int id, unsigned int *memoryToFree, const cha
 static void destructor(void *args)
 {
     DESTRUCTOR_ARGS *destructorArgs = (DESTRUCTOR_ARGS *)args;
+
+    #ifdef EXTRA_DEBUG
     printf("Destructor of id %d is executing. ", destructorArgs->id);
+    #endif
 
     if (destructorArgs->memoryToFree != NULL)
     {
+        #ifdef EXTRA_DEBUG
         printf("FREEING IT'S MEMORY -> ");
+        #endif
+
         free(destructorArgs->memoryToFree);
+
+        #ifdef EXTRA_DEBUG
         printf("OK\n");
+        #endif
     }
     threadStatus[destructorArgs->id - 1] = 1;
 }
@@ -516,7 +582,9 @@ int main(int argc, char *argv[])
     {
         ids[i] = i + 1;
 
+        #ifdef EXTRA_DEBUG
         threadSafePrintf(mainThreadId, NULL, "Main: Thread Creation %d\n", i + 1);
+        #endif
 
         // pthread_key_create(&keys[i], destructor);
         checkRCAndExitProcess("pthread_create", pthread_create(&threads[i], NULL, customer, &ids[i]));
