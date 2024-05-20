@@ -8,7 +8,7 @@
 #include <stdarg.h>
 #include <errno.h>
 #include <limits.h>
-// #define EXTRA_DEBUG
+// #define EXTRA_DEBUG // uncomment for extra debug
 // static pthread_key_t* keys;
 static int N;
 static int *threadStatus; //-1 thread not created, 0 threadCreated, 1 threadDestroyed
