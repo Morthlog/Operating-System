@@ -57,6 +57,7 @@ void checkRCAndExitProcess(const char *type, int rc);
 void threadSafePrintf(unsigned int id, unsigned int *selectedPizzaTypes, const char *format, ...);
 void freeMainResources();
 void cancelThreads();
+
 typedef struct destructorArgs 
 {
 	unsigned int id;
@@ -90,8 +91,9 @@ void *customer(void *x)
     unsigned int *selectedPizzaTypes = NULL;
     unsigned int id = *(unsigned int *)x;
     unsigned int tSeed = seed * id;
-    
     destructorArgs.id=id;
+
+    
     // all, except first customer, will call in random time
     if (id != 1)
     {
@@ -100,7 +102,6 @@ void *customer(void *x)
         sleep(randCallTime);
     }
    
-
     threadSafePrintf(id, selectedPizzaTypes, "Customer %d is Calling\n", id);
 
     checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_lock", pthread_mutex_lock(&telOperatorMtx));
@@ -341,12 +342,16 @@ void cancelThreads()
 
     for (int i = 0; i < N; i++)
     {    
-        checkRCAndExitProcess("pthread_join",pthread_join(threads[i], &status)) ;
+        if (threadStatus[i] == 0)
+        {
+             checkRCAndExitProcess("pthread_join",pthread_join(threads[i], &status)) ;
   
         if (status == PTHREAD_CANCELED)
             {printf("main(): thread %d was canceled\n",ids[i]);}
         else
             {printf("main(): thread %d wasn't canceled)\n",ids[i]);}//maybe it has already finished
+        }
+           
     }
 
     freeMainResources();
@@ -437,14 +442,18 @@ int main(int argc, char *argv[])
 
     for (int i = 0; i < N; i++)
     {
-        ids[i] = i + 1;
         threadStatus[i] = -1;//initialize to -1, meaning it's not created yet 
+    }
+    for (int i = 0; i < N; i++)
+    {
+        ids[i] = i + 1;
+        
         threadSafePrintf(mainThreadId, NULL, "Main: Thread Creation %d\n", i + 1);
         
        //pthread_key_create(&keys[i], destructor);
         checkRCAndExitProcess("pthread_create", pthread_create(&threads[i], NULL, customer, &ids[i]));     
         threadStatus[i]=0;
-        //checkRCAndExitProcess("Test cancellation request ",1);// Does not work as intended
+        checkRCAndExitProcess("Test cancellation request ",1);// Does not work as intended
     }
 
 // ================testing cancel S===========
