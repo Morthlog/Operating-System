@@ -9,7 +9,7 @@
 #include <errno.h>
 #include <limits.h>
 
-static pthread_key_t* keys;
+// static pthread_key_t* keys;
 static int N;
 static int* threadDone;
 
@@ -56,16 +56,35 @@ void checkRCAndExitThread(unsigned int id, unsigned int *selectedPizzaTypes, con
 void checkRCAndExitProcess(const char *type, int rc);
 void threadSafePrintf(unsigned int id, unsigned int *selectedPizzaTypes, const char *format, ...);
 void freeMainResources();
-static void destructor(void *memoryToFree);
+static void destructor(void *memoryToFree)
+{
+	//int *id = (int*) arg;
+	//threadSafePrintf();
+	printf("IN\n");
+	if(memoryToFree!=NULL)
+	{
+		printf ("======= FREE FROM DESTRUCT\n");
+		free(memoryToFree);
+		printf("OK\n");
+	}
+}	
+
+static void cleanupUnlockMutex(void *p)
+{
+    pthread_mutex_unlock(p);
+}
 
 void *customer(void *x)
 {
+    pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
+    pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, NULL);
     struct timespec start, orderEnd;
     clock_gettime(CLOCK_REALTIME, &start);
     unsigned int *selectedPizzaTypes = NULL;
     unsigned int id = *(unsigned int *)x;
     unsigned int tSeed = seed * id;
-
+    
+    
     // all, except first customer, will call in random time
     if (id != 1)
     {
@@ -73,10 +92,12 @@ void *customer(void *x)
         threadSafePrintf(id, selectedPizzaTypes, "Customer %d will call after %d seconds\n", id, randCallTime);
         sleep(randCallTime);
     }
+   
 
     threadSafePrintf(id, selectedPizzaTypes, "Customer %d is Calling\n", id);
 
     checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_lock", pthread_mutex_lock(&telOperatorMtx));
+    pthread_cleanup_push(cleanupUnlockMutex,(void *) &telOperatorMtx);
     while (availableTelOperator == 0)
     {
         threadSafePrintf(id, selectedPizzaTypes, "Customer %d didn't find available Operator. Blocked...\n", id);
@@ -85,17 +106,19 @@ void *customer(void *x)
     threadSafePrintf(id, selectedPizzaTypes, "Customer %d is Ordering.\n", id);
     availableTelOperator--;
     totalOrders += 1;
+    pthread_cleanup_pop(0);
     checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_unlock", pthread_mutex_unlock(&telOperatorMtx));
 
     int totalPizzas = rand_r(&tSeed) % N_orderHigh + N_orderLow;
     selectedPizzaTypes = (unsigned int *)malloc(totalPizzas * sizeof(int));
-    pthread_setspecific(keys[id], selectedPizzaTypes);
+    
+    // pthread_setspecific(keys[id], selectedPizzaTypes);
     if (selectedPizzaTypes == NULL)
     {
         printf("ERROR: Malloc failed not enough memory!\n");
         pthread_exit(x);
     }
-
+    pthread_cleanup_push(destructor, selectedPizzaTypes);
     randomlySelectPizzaCountAndType(id, tSeed, totalPizzas, selectedPizzaTypes);
 
     int randCardProccessingTime = rand_r(&tSeed) % T_paymentHigh + T_paymentLow;
@@ -109,6 +132,7 @@ void *customer(void *x)
     {
         threadSafePrintf(id, selectedPizzaTypes, "Order number %d has been Placed![%ld minute(s)] \n", id, interval);
         checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_lock", pthread_mutex_lock(&totalRevenueMtx));
+        pthread_cleanup_push(cleanupUnlockMutex,(void *) &totalRevenueMtx);
         totalSucOrders += 1;
         for (int i = 0; i < totalPizzas; i++)
         {
@@ -133,25 +157,31 @@ void *customer(void *x)
         {
         	maxTimeOrdering = interval;
         }
+        pthread_cleanup_pop(0);
         checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_lock", pthread_mutex_unlock(&totalRevenueMtx));
     }
     else
     {
         threadSafePrintf(id, selectedPizzaTypes, "Order number %d order failed![%ld minute(s)] \n", id, interval);
         checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_lock", pthread_mutex_lock(&telOperatorMtx));
+        pthread_cleanup_push(cleanupUnlockMutex,(void *) &telOperatorMtx);
     	availableTelOperator++;
     	checkRCAndExitThread(id, selectedPizzaTypes, "pthread_cond_signal", pthread_cond_signal(&telOperatorCond));
+        pthread_cleanup_pop(0);
     	checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_unlock", pthread_mutex_unlock(&telOperatorMtx));
 
     	pthread_exit(NULL);
     }
 
     checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_lock", pthread_mutex_lock(&telOperatorMtx));
+    pthread_cleanup_push(cleanupUnlockMutex,(void *) &telOperatorMtx);
     availableTelOperator++;
     checkRCAndExitThread(id, selectedPizzaTypes, "pthread_cond_signal", pthread_cond_signal(&telOperatorCond));
+    pthread_cleanup_pop(0);
     checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_unlock", pthread_mutex_unlock(&telOperatorMtx));
 
 	checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_lock", pthread_mutex_lock(&cookMtx));
+    pthread_cleanup_push(cleanupUnlockMutex,(void *) &cookMtx);
     while (availableCook < 0)
     {
         threadSafePrintf(id, selectedPizzaTypes, "Order %d didn't find any preparer. Waiting...\n", id);
@@ -159,10 +189,12 @@ void *customer(void *x)
     }
     threadSafePrintf(id, selectedPizzaTypes, "Order %d is being prepared.\n", id);
     availableCook -= 1;
+    pthread_cleanup_pop(0);
     checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_unlock", pthread_mutex_unlock(&cookMtx));
 	sleep(totalPizzas * T_prep);
 
 	checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_lock", pthread_mutex_lock(&ovenMtx));
+    pthread_cleanup_push(cleanupUnlockMutex,(void *) &ovenMtx);
     while (availableOven < totalPizzas)
     {
         threadSafePrintf(id, selectedPizzaTypes, "Order %d didn't find enough ovens. Waiting...\n", id);
@@ -170,17 +202,21 @@ void *customer(void *x)
     }
     threadSafePrintf(id, selectedPizzaTypes, "Order %d is in Oven.\n", id);
     availableOven -= totalPizzas;
+    pthread_cleanup_pop(0);
     checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_unlock", pthread_mutex_unlock(&ovenMtx));
     
     checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_lock", pthread_mutex_lock(&cookMtx));
+    pthread_cleanup_push(cleanupUnlockMutex,(void *) &cookMtx);
     availableCook += 1;
     checkRCAndExitThread(id, selectedPizzaTypes, "pthread_cond_signal", pthread_cond_signal(&cookCond));
+    pthread_cleanup_pop(0);
     checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_unlock", pthread_mutex_unlock(&cookMtx));
     
 	sleep(T_bake);
 	clock_gettime(CLOCK_REALTIME, &start);
 
 	checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_lock", pthread_mutex_lock(&delivererMtx));
+    pthread_cleanup_push(cleanupUnlockMutex,(void *) &delivererMtx);
     while (availableDeliverer < 0)
     {
         threadSafePrintf(id, selectedPizzaTypes, "Order %d can't get a deliverer. Waiting...\n", id);
@@ -188,11 +224,14 @@ void *customer(void *x)
     }
     threadSafePrintf(id, selectedPizzaTypes, "Order %d is being packed.\n", id);
     availableDeliverer -= 1;
+    pthread_cleanup_pop(0);
     checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_unlock", pthread_mutex_unlock(&delivererMtx));
 
 	checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_lock", pthread_mutex_lock(&ovenMtx));
+    pthread_cleanup_push(cleanupUnlockMutex,(void *) &ovenMtx);
 	availableOven += totalPizzas;
 	checkRCAndExitThread(id, selectedPizzaTypes, "pthread_cond_broadcast", pthread_cond_broadcast(&ovenCond));
+    pthread_cleanup_pop(0);
     checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_unlock", pthread_mutex_unlock(&ovenMtx));
 
 	sleep(T_pack * totalPizzas);
@@ -206,19 +245,25 @@ void *customer(void *x)
 
 	threadSafePrintf(id, selectedPizzaTypes, "Order %d was given to customer.[%ld minute(s)]\n", id, interval);
 	checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_lock", pthread_mutex_lock(&totalCoolingMtx));
+    pthread_cleanup_push(cleanupUnlockMutex,(void *) &totalCoolingMtx);
 	totalTimeCooling += interval;
 	if (maxTimeCooling < interval)
 	{
 		maxTimeCooling = interval;
 	}
+    pthread_cleanup_pop(0);
     checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_unlock", pthread_mutex_unlock(&totalCoolingMtx));
     
     sleep(randDeliveringTime);
 	threadSafePrintf(id, selectedPizzaTypes, "Delivery boy from order %d has returned.\n", id);
 	checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_lock", pthread_mutex_lock(&delivererMtx));
+    pthread_cleanup_push(cleanupUnlockMutex,(void *) &totalCoolingMtx);
     availableDeliverer += 1;
     checkRCAndExitThread(id, selectedPizzaTypes, "pthread_cond_signal", pthread_cond_signal(&delivererCond));
+    pthread_cleanup_pop(0);
     checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_unlock", pthread_mutex_unlock(&delivererMtx));
+
+    pthread_cleanup_pop(1);
     pthread_exit(NULL);
 }
 
@@ -317,18 +362,7 @@ void freeMainResources()
     free(ids);
 }
 
-static void destructor(void *memoryToFree)
-{
-	//int *id = (int*) arg;
-	//threadSafePrintf();
-	printf("IN\n");
-	if(memoryToFree!=NULL)
-	{
-		printf ("======= FREE FROM DESTRUCT\n");
-		free(memoryToFree);
-		printf("OK\n");
-	}
-}	
+
 
 int main(int argc, char *argv[])
 {
@@ -386,7 +420,7 @@ int main(int argc, char *argv[])
 	checkRCAndExitProcess("pthread_cond_init", pthread_cond_init(&delivererCond, NULL));
 	checkRCAndExitProcess("pthread_mutex_init", pthread_mutex_init(&totalCoolingMtx, NULL));
 	
-	keys = malloc (N*sizeof(pthread_key_t));
+	// keys = malloc (N*sizeof(pthread_key_t));
 	threadDone = malloc(N*sizeof(int));
 	
     for (int i = 0; i < N; i++)
@@ -394,15 +428,26 @@ int main(int argc, char *argv[])
         ids[i] = i + 1;
         threadDone[i] = 0;
         threadSafePrintf(mainThreadId, NULL, "Main: Thread Creation %d\n", i + 1);
-        pthread_key_create(&keys[i], destructor);
+       //pthread_key_create(&keys[i], destructor);
         checkRCAndExitProcess("pthread_create", pthread_create(&threads[i], NULL, customer, &ids[i]));
     }
 
+    sleep (3);
+    printf("main(): sending cancellation request\n");
+    void *status= NULL;
     for (int i = 0; i < N; i++)
     {
+       pthread_cancel(threads[i]);
+    }
 
-        checkRCAndExitProcess("pthread_join", pthread_join(threads[i], NULL));
-        threadDone[i] = 1;
+    for (int i = 0; i < N; i++)
+    {    
+        checkRCAndExitProcess("pthread_join", pthread_join(threads[i], &status));
+       
+        if (status == PTHREAD_CANCELED)
+            printf("main(): thread %d was canceled\n",ids[i]);
+        else
+            printf("main(): thread %d wasn't canceled (shouldn't happen!)\n",ids[i]);
     }
 
     printf("\nTotal Revenue: %d\n", totalRevenue);
@@ -430,6 +475,6 @@ int main(int argc, char *argv[])
 	checkRCAndExitProcess("pthread_cond_destroy", pthread_cond_destroy(&delivererCond));
 	checkRCAndExitProcess("pthread_mutex_destroy", pthread_mutex_destroy(&totalCoolingMtx));
 
-    freeMainResources();
+    // freeMainResources();
     return 0;
 }
