@@ -368,11 +368,11 @@ void checkRCAndExitProcess(const char *type, int rc)
 
 void cancelThreads()
 {
-    printf("======= FREE FROM MAIN\n");
+    printf("======= MAIN Cancels threads ======= \n");
     void *status = NULL;
     for (int i = 0; i < N; i++)
     {
-        printf("====Thread status %d\n", threadStatus[i]);
+        printf("Thread id %d status %d\n",i+1, threadStatus[i]);
         if (threadStatus[i] == 0) // if is created
         {
             pthread_cancel(threads[i]);
@@ -401,7 +401,7 @@ void cancelThreads()
 
 void freeMainResources()
 {
-    printf("freeing main resources\n");
+    printf("Freeing main resources\n");
     free(threadStatus);
     free(threads);
     free(ids);
@@ -423,11 +423,11 @@ void checkRCAndExitThread(unsigned int id, unsigned int *memoryToFree, const cha
 static void destructor(void *args)
 {
     DESTRUCTOR_ARGS *destructorArgs = (DESTRUCTOR_ARGS *)args;
-    printf("IN id %d\n", destructorArgs->id);
+    printf("Destructor of id %d is executing. ", destructorArgs->id);
 
     if (destructorArgs->memoryToFree != NULL)
     {
-        printf("======= FREE FROM DESTRUCT\n");
+        printf("FREEING IT'S MEMORY -> ");
         free(destructorArgs->memoryToFree);
         printf("OK\n");
     }
