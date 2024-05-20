@@ -11,7 +11,7 @@
 
 // static pthread_key_t* keys;
 static int N;
-static int* threadDone;
+static int* threadStatus;//-1 thread not created, 0 threadCreated, 1 threadDestroyed
 
 pthread_t *threads = NULL;
 unsigned int *ids = NULL;
@@ -56,17 +56,25 @@ void checkRCAndExitThread(unsigned int id, unsigned int *selectedPizzaTypes, con
 void checkRCAndExitProcess(const char *type, int rc);
 void threadSafePrintf(unsigned int id, unsigned int *selectedPizzaTypes, const char *format, ...);
 void freeMainResources();
-static void destructor(void *memoryToFree)
+
+typedef struct destructorArgs 
 {
-	//int *id = (int*) arg;
-	//threadSafePrintf();
-	printf("IN\n");
-	if(memoryToFree!=NULL)
+	unsigned int id;
+	unsigned int* memoryToFree;
+} DESTRUCTOR_ARGS;
+
+static void destructor(void *args)
+{
+    DESTRUCTOR_ARGS* destructorArgs = (DESTRUCTOR_ARGS *) args;
+	printf("IN id %d\n",destructorArgs->id);
+    
+	if(destructorArgs->memoryToFree!=NULL)
 	{
 		printf ("======= FREE FROM DESTRUCT\n");
-		free(memoryToFree);
+		free(destructorArgs->memoryToFree);
 		printf("OK\n");
 	}
+    threadStatus[destructorArgs->id-1]=1;
 }	
 
 static void cleanupUnlockMutex(void *p)
@@ -76,15 +84,14 @@ static void cleanupUnlockMutex(void *p)
 
 void *customer(void *x)
 {
-    pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
-    pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, NULL);
+    DESTRUCTOR_ARGS destructorArgs;
     struct timespec start, orderEnd;
     clock_gettime(CLOCK_REALTIME, &start);
     unsigned int *selectedPizzaTypes = NULL;
     unsigned int id = *(unsigned int *)x;
     unsigned int tSeed = seed * id;
     
-    
+    destructorArgs.id=id;
     // all, except first customer, will call in random time
     if (id != 1)
     {
@@ -118,7 +125,9 @@ void *customer(void *x)
         printf("ERROR: Malloc failed not enough memory!\n");
         pthread_exit(x);
     }
-    pthread_cleanup_push(destructor, selectedPizzaTypes);
+
+    destructorArgs.memoryToFree = selectedPizzaTypes;
+    pthread_cleanup_push(destructor, &destructorArgs);
     randomlySelectPizzaCountAndType(id, tSeed, totalPizzas, selectedPizzaTypes);
 
     int randCardProccessingTime = rand_r(&tSeed) % T_paymentHigh + T_paymentLow;
@@ -248,9 +257,8 @@ void *customer(void *x)
     pthread_cleanup_push(cleanupUnlockMutex,(void *) &totalCoolingMtx);
 	totalTimeCooling += interval;
 	if (maxTimeCooling < interval)
-	{
-		maxTimeCooling = interval;
-	}
+	    {maxTimeCooling = interval;}
+
     pthread_cleanup_pop(0);
     checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_unlock", pthread_mutex_unlock(&totalCoolingMtx));
     
@@ -274,12 +282,8 @@ void checkRCAndExitThread(unsigned int id, unsigned int *memoryToFree, const cha
         pthread_mutex_lock(&printMtx);
         printf("ERROR: return code from %s is %d\n", type, rc);
         pthread_mutex_unlock(&printMtx);
-        if(memoryToFree!=NULL)
-        {
-        	//	printf("========= FREE IN CHECK\n");
-          //    free(memoryToFree);
-        }  
-        pthread_exit(&id); // unlocks a mutex automatically? https://linux.die.net/man/3/pthread_cleanup_push
+
+        pthread_exit(&id); // Runs cleanup_pop and frees memory https://linux.die.net/man/3/pthread_cleanup_push
         					// cast to void was giving warning
     }
 }
@@ -287,13 +291,9 @@ void checkRCAndExitThread(unsigned int id, unsigned int *memoryToFree, const cha
 void threadSafePrintf(unsigned int id, unsigned int *memoryToFree, const char *format, ...)
 {
     if (id == mainThreadId)
-    {
-        checkRCAndExitProcess("pthread_mutex_lock", pthread_mutex_lock(&printMtx));
-    }
+        {checkRCAndExitProcess("pthread_mutex_lock", pthread_mutex_lock(&printMtx));}
     else
-    {
-        checkRCAndExitThread(id, memoryToFree, "pthread_mutex_lock", pthread_mutex_lock(&printMtx));
-    }
+        {checkRCAndExitThread(id, memoryToFree, "pthread_mutex_lock", pthread_mutex_lock(&printMtx));}
 
     va_list args;
     va_start(args, format);
@@ -301,13 +301,9 @@ void threadSafePrintf(unsigned int id, unsigned int *memoryToFree, const char *f
     va_end(args);
 
     if (id == mainThreadId)
-    {
-        checkRCAndExitProcess("pthread_mutex_unlock", pthread_mutex_unlock(&printMtx));
-    }
+        {checkRCAndExitProcess("pthread_mutex_unlock", pthread_mutex_unlock(&printMtx));}
     else
-    {
-        checkRCAndExitThread(id, memoryToFree, "pthread_mutex_unlock", pthread_mutex_unlock(&printMtx));
-    }
+        {checkRCAndExitThread(id, memoryToFree, "pthread_mutex_unlock", pthread_mutex_unlock(&printMtx));}
 }
 
 void randomlySelectPizzaCountAndType(unsigned int id, unsigned int tSeed, unsigned int totalPizzas, unsigned int *selectedPizzaTypes)
@@ -325,13 +321,9 @@ unsigned int weightedProbability(float randDecimal, const float *probabilityArra
     for (int i = 0; i < size; i++)
     {
         if (randDecimal < probabilityArray[i])
-        {
-            return i;
-        }
+            { return i;}
         else
-        {
-            randDecimal -= probabilityArray[i];
-        }
+            {randDecimal -= probabilityArray[i];}
     }
     return -1;
 }
@@ -351,13 +343,24 @@ void checkRCAndExitProcess(const char *type, int rc)
 void freeMainResources()
 {
 	printf ("======= FREE FROM MAIN\n");
+    void *status= NULL;
 	for (int i = 0; i < N; i++)
     {
- 		if (threadDone[i] == 1) continue;
-    	
-    	pthread_cancel(threads[i]);
-        checkRCAndExitProcess("pthread_join", pthread_join(threads[i], NULL));
+        printf ("====Thread status %d\n",threadStatus[i]);
+ 		if (threadStatus[i] == 0)//if is created
+    	    {pthread_cancel(threads[i]);}
     }
+
+    for (int i = 0; i < N; i++)
+    {    
+        checkRCAndExitProcess("pthread_join",pthread_join(threads[i], &status)) ;
+  
+        if (status == PTHREAD_CANCELED)
+            {printf("main(): thread %d was canceled\n",ids[i]);}
+        else
+            {printf("main(): thread %d wasn't canceled (shouldn't happen!)\n",ids[i]);}
+    }
+    free(threadStatus);
     free(threads);
     free(ids);
 }
@@ -376,18 +379,14 @@ int main(int argc, char *argv[])
     errno = 0; 
     long lN = strtol(argv[1], &p, 10);
     if (*p != '\0' ||  errno != 0) 
-    {
-        return -1;
-    }
+        {return -1;}
+    
     long lseed = strtol(argv[2], &p, 10);
     if (*p != '\0' ||  errno != 0) 
-    {
-        return -1;
-    }
+        {return -1;}
 	if (lN < INT_MIN || lN > INT_MAX || lseed < 0 || lseed > UINT_MAX) 
-	{
-        return -1;
-    }
+	    {return -1;}
+          
     N = (int) lN;
     seed = (uint) lseed;
     
@@ -399,7 +398,7 @@ int main(int argc, char *argv[])
         printf("ERROR: Malloc failed not enough memory!\n");
         return -1;
     }
-    unsigned int *ids = (unsigned int *)malloc(N * sizeof(int));
+    ids = (unsigned int *)malloc(N * sizeof(int));
     // elegxos an apetyxe i malloc
     if (ids == NULL)
     {
@@ -421,34 +420,32 @@ int main(int argc, char *argv[])
 	checkRCAndExitProcess("pthread_mutex_init", pthread_mutex_init(&totalCoolingMtx, NULL));
 	
 	// keys = malloc (N*sizeof(pthread_key_t));
-	threadDone = malloc(N*sizeof(int));
-	
+	threadStatus = malloc(N*sizeof(int));
+	if (threadStatus == NULL)
+    {
+        printf("ERROR: Malloc failed not enough memory!\n");
+        free(threads);
+        free(ids);      
+        return -1;
+    }
+
     for (int i = 0; i < N; i++)
     {
         ids[i] = i + 1;
-        threadDone[i] = 0;
+        threadStatus[i] = -1;//initialize to -1, meaning it's not created yet 
         threadSafePrintf(mainThreadId, NULL, "Main: Thread Creation %d\n", i + 1);
+        
        //pthread_key_create(&keys[i], destructor);
-        checkRCAndExitProcess("pthread_create", pthread_create(&threads[i], NULL, customer, &ids[i]));
+        checkRCAndExitProcess("pthread_create", pthread_create(&threads[i], NULL, customer, &ids[i]));     
+        threadStatus[i]=0;
+        // checkRCAndExitProcess("Test cancellation request ",1); Does not work as intended
     }
 
-    sleep (3);
-    printf("main(): sending cancellation request\n");
-    void *status= NULL;
-    for (int i = 0; i < N; i++)
-    {
-       pthread_cancel(threads[i]);
-    }
+// ================testing cancel S===========
+   // sleep (3);//sleep to test cancel
+    //checkRCAndExitProcess("Test cancellation request ",1);
+// ================testing cancel E===========
 
-    for (int i = 0; i < N; i++)
-    {    
-        checkRCAndExitProcess("pthread_join", pthread_join(threads[i], &status));
-       
-        if (status == PTHREAD_CANCELED)
-            printf("main(): thread %d was canceled\n",ids[i]);
-        else
-            printf("main(): thread %d wasn't canceled (shouldn't happen!)\n",ids[i]);
-    }
 
     printf("\nTotal Revenue: %d\n", totalRevenue);
 	printf("Pizzas sold\nmargarita: %d\npeperoni: %d\nspecial: %d\n", pizzaSellings[0], pizzaSellings[1], pizzaSellings[2]);
@@ -458,10 +455,8 @@ int main(int argc, char *argv[])
 		printf("Average ordering time: %d minute(s)\nLongest ordering time: %d minute(s)\n", totalTimeOrdering/totalSucOrders, maxTimeOrdering);
 		printf("Average cooling time: %d minute(s)\nLongest cooling time: %d minute(s)\n", totalTimeCooling/totalSucOrders, maxTimeCooling);
 	}
-	else
-	{
-		printf("There were no succesfull orders\n");
-	}
+	else 
+	    {printf("There were no succesfull orders\n");}
 
     checkRCAndExitProcess("pthread_mutex_destroy", pthread_mutex_destroy(&printMtx));
     checkRCAndExitProcess("pthread_mutex_destroy", pthread_mutex_destroy(&telOperatorMtx));
@@ -475,6 +470,6 @@ int main(int argc, char *argv[])
 	checkRCAndExitProcess("pthread_cond_destroy", pthread_cond_destroy(&delivererCond));
 	checkRCAndExitProcess("pthread_mutex_destroy", pthread_mutex_destroy(&totalCoolingMtx));
 
-    // freeMainResources();
+    freeMainResources();
     return 0;
 }
