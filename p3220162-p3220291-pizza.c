@@ -73,7 +73,7 @@ typedef struct destructorArgs
 void *customer(void *x)
 {
     DESTRUCTOR_ARGS destructorArgs;
-    struct timespec threadStartTime, callTime, bakeFinishTime, currentTime;
+    struct timespec threadStartTime, bakeFinishTime, currentTime;
     clock_gettime(CLOCK_REALTIME, &threadStartTime);
     unsigned int *selectedPizzaTypes = NULL;
     unsigned int id = *(unsigned int *)x;
@@ -128,7 +128,6 @@ void *customer(void *x)
     #endif
     #pragma endregion
 
-    clock_gettime(CLOCK_REALTIME, &callTime);
  //====END=======The first customer calls at time 0, and each subsequent customer calls after a random integer interval======
 
 // =====START===When all phone operators are busy, the customer waits for the next available phone operator==================
@@ -177,9 +176,6 @@ void *customer(void *x)
 // ===START===The operator needs a random number of minutes to charge the customer's credit card=====
     int randCardProccessingTime = rand_r(&tSeed) % T_paymentHigh + T_paymentLow;
     sleep(randCardProccessingTime);
-
-    clock_gettime(CLOCK_REALTIME, &currentTime);
-    long timeSinceStart = currentTime.tv_sec - threadStartTime.tv_sec;
     
 // ===END===The operator needs a random number of minutes to charge the customer's credit card=====
 
@@ -189,7 +185,7 @@ void *customer(void *x)
     double randFail = (double)rand_r(&tSeed) / RAND_MAX;
     if (randFail >= P_fail)
     {
-        threadSafePrintf(id, selectedPizzaTypes, "Order number %d has been Placed![Time: %ld minute(s)] \n", id, timeSinceStart);
+        threadSafePrintf(id, selectedPizzaTypes, "Order number %d has been Placed!\n", id);
         checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_lock", pthread_mutex_lock(&totalRevenueMtx));
         pthread_cleanup_push(cleanupUnlockMutex, (void *)&totalRevenueMtx);
         totalSucOrders += 1;
@@ -217,7 +213,7 @@ void *customer(void *x)
     }
     else
     {
-        threadSafePrintf(id, selectedPizzaTypes, "Order number %d order failed![Time: %ld minute(s)] \n", id, timeSinceStart);
+        threadSafePrintf(id, selectedPizzaTypes, "Order number %d order failed! \n", id);
         checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_lock", pthread_mutex_lock(&telOperatorMtx));
         pthread_cleanup_push(cleanupUnlockMutex, (void *)&telOperatorMtx);
         availableTelOperator++;
@@ -323,9 +319,9 @@ void *customer(void *x)
 
     sleep(T_pack * totalPizzas);
     clock_gettime(CLOCK_REALTIME, &currentTime);
-    int XcallToPack = currentTime.tv_sec - callTime.tv_sec;
+  
     timeSinceStart = currentTime.tv_sec - threadStartTime.tv_sec;
-    threadSafePrintf(id, selectedPizzaTypes, "Order %d was ready in %ld minute(s).[Time: %ld minute(s)].\n", id, XcallToPack, timeSinceStart);
+    threadSafePrintf(id, selectedPizzaTypes, "Order %d was ready in %ld minute(s).\n", id, timeSinceStart);
 
     int randDeliveringTime = rand_r(&tSeed) % (T_delHigh - T_delLow + 1) + T_delLow;
     sleep(randDeliveringTime);
@@ -333,9 +329,8 @@ void *customer(void *x)
     clock_gettime(CLOCK_REALTIME, &currentTime);
     timeSinceStart = currentTime.tv_sec - threadStartTime.tv_sec;
     interval = currentTime.tv_sec - bakeFinishTime.tv_sec;
-    int YcallToDelivery = currentTime.tv_sec - callTime.tv_sec;
     
-    threadSafePrintf(id, selectedPizzaTypes, "Order %d was delivered in %ld minute(s).[Time: %ld minute(s)]\n", id, YcallToDelivery, timeSinceStart);
+    threadSafePrintf(id, selectedPizzaTypes, "Order %d was delivered in %ld minute(s).\n", id, timeSinceStart);
     checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_lock", pthread_mutex_lock(&totalCoolingMtx));
     pthread_cleanup_push(cleanupUnlockMutex, (void *)&totalCoolingMtx);
     totalTimeCooling += interval;
@@ -344,10 +339,10 @@ void *customer(void *x)
         maxTimeCooling = interval;
     }
 
-    totalTimeOrdering += YcallToDelivery;
-    if (YcallToDelivery > maxTimeOrdering)
+    totalTimeOrdering += timeSinceStart;
+    if (timeSinceStart > maxTimeOrdering)
     {
-        maxTimeOrdering = YcallToDelivery;
+        maxTimeOrdering = timeSinceStart;
     }
     pthread_cleanup_pop(0);
     checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_unlock", pthread_mutex_unlock(&totalCoolingMtx));
