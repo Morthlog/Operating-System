@@ -23,10 +23,6 @@ pthread_cond_t telOperatorCond;
 unsigned int availableTelOperator = N_tel;
 unsigned int totalOrders = 0;
 
-pthread_mutex_t waitPreviousCustomerCallMtx;
-pthread_cond_t waitPreviousCustomerCond;
-int waitForPreviousCustomerCall = 0;
-
 pthread_mutex_t printMtx;
 pthread_mutex_t totalRevenueMtx;
 unsigned int totalRevenue = 0;
@@ -82,53 +78,6 @@ void *customer(void *x)
     long timeSinceStart = 0;
     destructorArgs.id = id;
 
-/*====Start=======The first customer calls at time 0, and each subsequent customer calls after a random integer interval======*/ 
-    if (id != 1)
-    {
-        int randCallTime = rand_r(&tSeed) % T_orderHigh + T_orderLow;
-        
-        checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_lock", pthread_mutex_lock(&waitPreviousCustomerCallMtx));
-        pthread_cleanup_push(cleanupUnlockMutex, (void *)&waitPreviousCustomerCallMtx);
-        while (waitForPreviousCustomerCall == 1)
-        {
-            #pragma region
-            #ifdef EXTRA_DEBUG
-            threadSafePrintf(id, selectedPizzaTypes, "Customer %d waiting for the previous customer to call. Blocked...\n", id);
-            #endif
-            #pragma endregion 
-            
-            checkRCAndExitThread(id, selectedPizzaTypes, "pthread_cond_wait", pthread_cond_wait(&waitPreviousCustomerCond, &waitPreviousCustomerCallMtx));
-        }
-        waitForPreviousCustomerCall = 1;       
-        pthread_cleanup_pop(0);
-        checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_unlock", pthread_mutex_unlock(&waitPreviousCustomerCallMtx));   
-        
-        #pragma region
-        #ifdef EXTRA_DEBUG
-        clock_gettime(CLOCK_REALTIME, &currentTime);
-        timeSinceStart = currentTime.tv_sec - threadStartTime.tv_sec;      
-        threadSafePrintf(id, selectedPizzaTypes, "Customer %d will call after %d minutes. [Time:%ld minute(s)]\n", id, randCallTime, timeSinceStart);
-        #endif
-        #pragma endregion
-
-        sleep(randCallTime);
-
-        checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_lock", pthread_mutex_lock(&waitPreviousCustomerCallMtx));
-        pthread_cleanup_push(cleanupUnlockMutex, (void *)&waitPreviousCustomerCallMtx);
-        waitForPreviousCustomerCall = 0;
-        checkRCAndExitThread(id, selectedPizzaTypes, "pthread_cond_signal", pthread_cond_signal(&waitPreviousCustomerCond));
-        pthread_cleanup_pop(0);
-        checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_unlock", pthread_mutex_unlock(&waitPreviousCustomerCallMtx));   
-    }
-    #pragma region
-    #ifdef EXTRA_DEBUG
-    clock_gettime(CLOCK_REALTIME, &currentTime);
-    timeSinceStart = currentTime.tv_sec - threadStartTime.tv_sec;  
-    threadSafePrintf(id, selectedPizzaTypes, "Customer %d is Calling [Time:%ld minute(s)]\n", id, timeSinceStart);
-    #endif
-    #pragma endregion
-
- //====END=======The first customer calls at time 0, and each subsequent customer calls after a random integer interval======
 
 // =====START===When all phone operators are busy, the customer waits for the next available phone operator==================
     checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_lock", pthread_mutex_lock(&telOperatorMtx));
@@ -615,13 +564,18 @@ int main(int argc, char *argv[])
     for (int i = 0; i < N; i++)
     {
         ids[i] = i + 1;
-
+        if(i>0)
+        {
+            int  randCallTime = rand_r(&seed) % T_orderHigh + T_orderLow;
+            sleep(randCallTime);
+        }
         #pragma region
         #ifdef EXTRA_DEBUG
         threadSafePrintf(mainThreadId, NULL, "Main: Thread Creation %d\n", i + 1);
         #endif
         #pragma endregion
         // pthread_key_create(&keys[i], destructor);
+       
         checkRCAndExitProcess("pthread_create", pthread_create(&threads[i], NULL, customer, &ids[i]));
         threadStatus[i] = 0;
         // checkRCAndExitProcess("Test cancellation request ",1);// Test point
