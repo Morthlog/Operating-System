@@ -55,7 +55,7 @@ const float availablePizzaTypes[] = {P_m, P_p, P_s};
 const char *PizzaNames[] = {"Margarita", "Pepperoni", "Special"};
 
 unsigned int weightedProbability(float randomDecimal, const float *probabilityArray, unsigned int size);
-void randomlySelectPizzaCountAndType(unsigned int id, unsigned int tSeed, unsigned int totalPizzas, unsigned int *selectedPizzaTypes);
+void randomlySelectPizzaType(unsigned int id, unsigned int tSeed, unsigned int totalPizzas, unsigned int *selectedPizzaTypes);
 void checkRCAndExitThread(unsigned int id, unsigned int *selectedPizzaTypes, const char *type, int rc);
 void checkRCAndExitProcess(const char *type, int rc);
 void threadSafePrintf(unsigned int id, unsigned int *selectedPizzaTypes, const char *format, ...);
@@ -170,7 +170,7 @@ void *customer(void *x)
 
     destructorArgs.memoryToFree = selectedPizzaTypes;
     pthread_cleanup_push(destructor, &destructorArgs);
-    randomlySelectPizzaCountAndType(id, tSeed, totalPizzas, selectedPizzaTypes);
+    randomlySelectPizzaType(id, tSeed, totalPizzas, selectedPizzaTypes);
 // ===END===When a customer connects to an operator, they select a random integer number of pizzas and Type====
 
 
@@ -396,7 +396,7 @@ void threadSafePrintf(unsigned int id, unsigned int *memoryToFree, const char *f
     }
 }
 
-void randomlySelectPizzaCountAndType(unsigned int id, unsigned int tSeed, unsigned int totalPizzas, unsigned int *selectedPizzaTypes)
+void randomlySelectPizzaType(unsigned int id, unsigned int tSeed, unsigned int totalPizzas, unsigned int *selectedPizzaTypes)
 {
     for (int i = 0; i < totalPizzas; i++)
     {
