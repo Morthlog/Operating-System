@@ -437,6 +437,18 @@ void freeMainResources()
     #endif
     #pragma endregion
 
+    checkRCAndExitProcess("pthread_mutex_destroy", pthread_mutex_destroy(&printMtx));
+    checkRCAndExitProcess("pthread_mutex_destroy", pthread_mutex_destroy(&telOperatorMtx));
+    checkRCAndExitProcess("pthread_cond_destroy", pthread_cond_destroy(&telOperatorCond));
+    checkRCAndExitProcess("pthread_mutex_destroy", pthread_mutex_destroy(&totalRevenueMtx));
+    checkRCAndExitProcess("pthread_mutex_destroy", pthread_mutex_destroy(&cookMtx));
+    checkRCAndExitProcess("pthread_cond_destroy", pthread_cond_destroy(&cookCond));
+    checkRCAndExitProcess("pthread_mutex_destroy", pthread_mutex_destroy(&ovenMtx));
+    checkRCAndExitProcess("pthread_cond_destroy", pthread_cond_destroy(&ovenCond));
+    checkRCAndExitProcess("pthread_mutex_destroy", pthread_mutex_destroy(&delivererMtx));
+    checkRCAndExitProcess("pthread_cond_destroy", pthread_cond_destroy(&delivererCond));
+    checkRCAndExitProcess("pthread_mutex_destroy", pthread_mutex_destroy(&totalCoolingMtx));
+
     free(threadStatus);
     free(threads);
     free(ids);
@@ -603,18 +615,6 @@ int main(int argc, char *argv[])
     {
         printf("There were no succesfull orders\n");
     }
-
-    checkRCAndExitProcess("pthread_mutex_destroy", pthread_mutex_destroy(&printMtx));
-    checkRCAndExitProcess("pthread_mutex_destroy", pthread_mutex_destroy(&telOperatorMtx));
-    checkRCAndExitProcess("pthread_cond_destroy", pthread_cond_destroy(&telOperatorCond));
-    checkRCAndExitProcess("pthread_mutex_destroy", pthread_mutex_destroy(&totalRevenueMtx));
-    checkRCAndExitProcess("pthread_mutex_destroy", pthread_mutex_destroy(&cookMtx));
-    checkRCAndExitProcess("pthread_cond_destroy", pthread_cond_destroy(&cookCond));
-    checkRCAndExitProcess("pthread_mutex_destroy", pthread_mutex_destroy(&ovenMtx));
-    checkRCAndExitProcess("pthread_cond_destroy", pthread_cond_destroy(&ovenCond));
-    checkRCAndExitProcess("pthread_mutex_destroy", pthread_mutex_destroy(&delivererMtx));
-    checkRCAndExitProcess("pthread_cond_destroy", pthread_cond_destroy(&delivererCond));
-    checkRCAndExitProcess("pthread_mutex_destroy", pthread_mutex_destroy(&totalCoolingMtx));
 
     freeMainResources();
     return 0;
