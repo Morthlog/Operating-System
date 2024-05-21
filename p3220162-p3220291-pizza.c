@@ -553,16 +553,19 @@ int main(int argc, char *argv[])
     long lN = strtol(argv[1], &p, 10);
     if (*p != '\0' || errno != 0)
     {
+        printf("Second arguments should be a number, or a smaller number\n");
         return -1;
     }
 
     long lseed = strtol(argv[2], &p, 10);
     if (*p != '\0' || errno != 0)
     {
+        printf("Third arguments should be a number, or a smaller number\n");
         return -1;
     }
     if (lN < INT_MIN || lN > INT_MAX || lseed < 0 || lseed > UINT_MAX)
     {
+        printf("One of the arguments is out of the (unsigned) integer range.\n");
         return -1;
     }
 
@@ -621,7 +624,6 @@ int main(int argc, char *argv[])
         threadSafePrintf(mainThreadId, NULL, "Main: Thread Creation %d\n", i + 1);
         #endif
         #pragma endregion
-        // pthread_key_create(&keys[i], destructor);
         checkRCAndExitProcess("pthread_create", pthread_create(&threads[i], NULL, customer, &ids[i]));
         threadStatus[i] = 0;
         // checkRCAndExitProcess("Test cancellation request ",1);// Test point
