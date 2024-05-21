@@ -85,6 +85,8 @@ void *customer(void *x)
 /*====Start=======The first customer calls at time 0, and each subsequent customer calls after a random integer interval======*/ 
     if (id != 1)
     {
+        int randCallTime = rand_r(&tSeed) % T_orderHigh + T_orderLow;
+        
         checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_lock", pthread_mutex_lock(&waitPreviousCustomerCallMtx));
         pthread_cleanup_push(cleanupUnlockMutex, (void *)&waitPreviousCustomerCallMtx);
         while (waitForPreviousCustomerCall == 1)
@@ -99,9 +101,7 @@ void *customer(void *x)
         }
         waitForPreviousCustomerCall = 1;       
         pthread_cleanup_pop(0);
-        checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_unlock", pthread_mutex_unlock(&waitPreviousCustomerCallMtx));
-
-        int randCallTime = rand_r(&tSeed) % T_orderHigh + T_orderLow;
+        checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_unlock", pthread_mutex_unlock(&waitPreviousCustomerCallMtx));   
         
         #pragma region
         #ifdef EXTRA_DEBUG
