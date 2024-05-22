@@ -9,7 +9,6 @@
 #include <errno.h>
 #include <limits.h>
 // #define EXTRA_DEBUG // uncomment for extra debug
-// static pthread_key_t* keys;
 static int N;
 static int *threadStatus; //-1 thread not created, 0 threadCreated, 1 threadDestroyed
 
@@ -59,6 +58,7 @@ void freeMainResources();
 void cancelThreads();
 static void destructor(void *args);
 static void cleanupUnlockMutex(void *p);
+
 typedef struct destructorArgs
 {
     unsigned int id;
@@ -105,7 +105,6 @@ void *customer(void *x)
     int totalPizzas = rand_r(&tSeed) % N_orderHigh + N_orderLow;
     selectedPizzaTypes = (unsigned int *)malloc(totalPizzas * sizeof(int));
 
-    // pthread_setspecific(keys[id], selectedPizzaTypes);
     if (selectedPizzaTypes == NULL)
     {
         printf("ERROR: Malloc failed not enough memory!\n");
@@ -121,7 +120,6 @@ void *customer(void *x)
 // ===START===The operator needs a random number of minutes to charge the customer's credit card=====
     int randCardProccessingTime = rand_r(&tSeed) % T_paymentHigh + T_paymentLow;
     sleep(randCardProccessingTime);
-    
 // ===END===The operator needs a random number of minutes to charge the customer's credit card=====
 
 
@@ -269,7 +267,7 @@ void *customer(void *x)
     checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_lock", pthread_mutex_lock(&totalCoolingMtx));
     pthread_cleanup_push(cleanupUnlockMutex, (void *)&totalCoolingMtx);
     totalTimeCooling += interval;
-    
+
     if (maxTimeCooling < interval)
     {
         maxTimeCooling = interval;
@@ -535,7 +533,6 @@ int main(int argc, char *argv[])
     checkRCAndExitProcess("pthread_cond_init", pthread_cond_init(&delivererCond, NULL));
     checkRCAndExitProcess("pthread_mutex_init", pthread_mutex_init(&totalCoolingMtx, NULL));
 
-    // keys = malloc (N*sizeof(pthread_key_t));
     threadStatus = malloc(N * sizeof(int));
     if (threadStatus == NULL)
     {
@@ -564,13 +561,9 @@ int main(int argc, char *argv[])
 
         checkRCAndExitProcess("pthread_create", pthread_create(&threads[i], NULL, customer, &ids[i]));
         threadStatus[i] = 0;
-        // checkRCAndExitProcess("Test cancellation request ",1);// Test point
-    }
 
-    // ================testing cancel S===========
-    //sleep(3); // sleep to test cancel
-    //checkRCAndExitProcess("Test cancellation request ", 1);
-    // ================testing cancel E===========
+    }
+    
     for (int i = 0; i < N; i++)
     {
         checkRCAndExitProcess("pthread_join", pthread_join(threads[i], NULL));
