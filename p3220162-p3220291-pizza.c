@@ -78,25 +78,21 @@ void *customer(void *x)
     long timeSinceStart = 0;
     destructorArgs.id = id;
 
-
 // =====START===When all phone operators are busy, the customer waits for the next available phone operator==================
     checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_lock", pthread_mutex_lock(&telOperatorMtx));
     pthread_cleanup_push(cleanupUnlockMutex, (void *)&telOperatorMtx);
     while (availableTelOperator == 0)
     {
-        #pragma region
         #ifdef EXTRA_DEBUG
         threadSafePrintf(id, selectedPizzaTypes, "Customer %d didn't find available Operator. Blocked...\n", id);
         #endif
-        #pragma endregion
 
         checkRCAndExitThread(id, selectedPizzaTypes, "pthread_cond_wait", pthread_cond_wait(&telOperatorCond, &telOperatorMtx));       
     }
-    #pragma region
+
     #ifdef EXTRA_DEBUG
     threadSafePrintf(id, selectedPizzaTypes, "Customer %d is Ordering.\n", id);
     #endif
-    #pragma endregion
 
     availableTelOperator--;
     totalOrders += 1;
@@ -187,19 +183,15 @@ void *customer(void *x)
     pthread_cleanup_push(cleanupUnlockMutex, (void *)&cookMtx);
     while (availableCook < 0)
     {
-        #pragma region
         #ifdef EXTRA_DEBUG
         threadSafePrintf(id, selectedPizzaTypes, "Order %d didn't find any preparer. Waiting...\n", id);
         #endif
-        #pragma endregion
 
         checkRCAndExitThread(id, selectedPizzaTypes, "pthread_cond_wait", pthread_cond_wait(&cookCond, &cookMtx));
     }
-    #pragma region
     #ifdef EXTRA_DEBUG
     threadSafePrintf(id, selectedPizzaTypes, "Order %d is being prepared.\n", id);
     #endif
-    #pragma endregion
 
     availableCook -= 1;
     pthread_cleanup_pop(0);
@@ -209,21 +201,17 @@ void *customer(void *x)
     checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_lock", pthread_mutex_lock(&ovenMtx));
     pthread_cleanup_push(cleanupUnlockMutex, (void *)&ovenMtx);
     while (availableOven < totalPizzas)
-    {
-        #pragma region
+    {    
         #ifdef EXTRA_DEBUG
         threadSafePrintf(id, selectedPizzaTypes, "Order %d didn't find enough ovens. Waiting...\n", id);
         #endif
-        #pragma endregion
-
+       
         checkRCAndExitThread(id, selectedPizzaTypes, "pthread_cond_wait", pthread_cond_wait(&ovenCond, &ovenMtx));
     }
-    #pragma region
     #ifdef EXTRA_DEBUG
     threadSafePrintf(id, selectedPizzaTypes, "Order %d is in Oven.\n", id);
     #endif
-    #pragma endregion
-    
+ 
     availableOven -= totalPizzas;
     pthread_cleanup_pop(0);
     checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_unlock", pthread_mutex_unlock(&ovenMtx));
@@ -242,19 +230,17 @@ void *customer(void *x)
     pthread_cleanup_push(cleanupUnlockMutex, (void *)&delivererMtx);
     while (availableDeliverer < 0)
     {
-        #pragma region
         #ifdef EXTRA_DEBUG
         threadSafePrintf(id, selectedPizzaTypes, "Order %d can't get a deliverer. Waiting...\n", id);
         #endif
-        #pragma endregion
+
         checkRCAndExitThread(id, selectedPizzaTypes, "pthread_cond_wait", pthread_cond_wait(&delivererCond, &delivererMtx));
     }
-    #pragma region
+
     #ifdef EXTRA_DEBUG
     threadSafePrintf(id, selectedPizzaTypes, "Order %d is being packed.\n", id);
     #endif
-    #pragma endregion
-    
+
     availableDeliverer -= 1;
     pthread_cleanup_pop(0);
     checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_unlock", pthread_mutex_unlock(&delivererMtx));
@@ -283,6 +269,7 @@ void *customer(void *x)
     checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_lock", pthread_mutex_lock(&totalCoolingMtx));
     pthread_cleanup_push(cleanupUnlockMutex, (void *)&totalCoolingMtx);
     totalTimeCooling += interval;
+    
     if (maxTimeCooling < interval)
     {
         maxTimeCooling = interval;
@@ -298,11 +285,10 @@ void *customer(void *x)
 
     sleep(randDeliveringTime);
 
-    #pragma region
     #ifdef EXTRA_DEBUG
     threadSafePrintf(id, selectedPizzaTypes, "Delivery boy from order %d has returned.\n", id);
     #endif
-    #pragma endregion
+
     checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_lock", pthread_mutex_lock(&delivererMtx));
     pthread_cleanup_push(cleanupUnlockMutex, (void *)&delivererMtx);
     availableDeliverer += 1;
@@ -347,11 +333,9 @@ void randomlySelectPizzaType(unsigned int id, unsigned int tSeed, unsigned int t
         double randDecimal = (double)rand_r(&tSeed) / RAND_MAX;
         selectedPizzaTypes[i] = weightedProbability(randDecimal, availablePizzaTypes, 3);
 
-        #pragma region
         #ifdef EXTRA_DEBUG
         threadSafePrintf(id, selectedPizzaTypes, "Customer %d chose a %s\n", id, PizzaNames[selectedPizzaTypes[i]]);
         #endif
-        #pragma endregion
     }
 }
 
@@ -386,19 +370,17 @@ void checkRCAndExitProcess(const char *type, int rc)
 
 void cancelThreads()
 {
-    #pragma region
     #ifdef EXTRA_DEBUG
     printf("======= MAIN Cancels threads ======= \n");
     #endif
-    #pragma endregion
+
     void *status = NULL;
     for (int i = 0; i < N; i++)
     {   
-        #pragma region
         #ifdef EXTRA_DEBUG
         printf("Thread id %d status %d\n",i+1, threadStatus[i]);
         #endif
-        #pragma endregion
+
         if (threadStatus[i] == 0) // if is created
         {
             pthread_cancel(threads[i]);
@@ -411,7 +393,6 @@ void cancelThreads()
         {
             checkRCAndExitProcess("pthread_join", pthread_join(threads[i], &status));
 
-            #pragma region
             #ifdef EXTRA_DEBUG
             if (status == PTHREAD_CANCELED)
             {
@@ -422,7 +403,6 @@ void cancelThreads()
                 printf("main(): thread %d wasn't canceled)\n", ids[i]);
             } // maybe it has already finished
             #endif
-            #pragma endregion
         }
     }
 
@@ -431,11 +411,9 @@ void cancelThreads()
 
 void freeMainResources()
 {
-    #pragma region
     #ifdef EXTRA_DEBUG
     printf("Freeing main resources\n");
     #endif
-    #pragma endregion
 
     checkRCAndExitProcess("pthread_mutex_destroy", pthread_mutex_destroy(&printMtx));
     checkRCAndExitProcess("pthread_mutex_destroy", pthread_mutex_destroy(&telOperatorMtx));
@@ -471,26 +449,21 @@ static void destructor(void *args)
 {
     DESTRUCTOR_ARGS *destructorArgs = (DESTRUCTOR_ARGS *)args;
 
-    #pragma region
     #ifdef EXTRA_DEBUG
     printf("Destructor of id %d is executing. ", destructorArgs->id);
     #endif
-    #pragma endregion
+
     if (destructorArgs->memoryToFree != NULL)
     {
-        #pragma region
         #ifdef EXTRA_DEBUG
         printf("FREEING IT'S MEMORY -> ");
         #endif
-        #pragma endregion
 
         free(destructorArgs->memoryToFree);
 
-        #pragma region
         #ifdef EXTRA_DEBUG
         printf("OK\n");
         #endif
-        #pragma endregion
     }
     threadStatus[destructorArgs->id - 1] = 1;
 }
@@ -584,11 +557,11 @@ int main(int argc, char *argv[])
             int  randCallTime = rand_r(&seed) % T_orderHigh + T_orderLow;
             sleep(randCallTime);
         }
-        #pragma region
+
         #ifdef EXTRA_DEBUG
         threadSafePrintf(mainThreadId, NULL, "Main: Thread Creation %d\n", i + 1);
         #endif
-        #pragma endregion
+
         checkRCAndExitProcess("pthread_create", pthread_create(&threads[i], NULL, customer, &ids[i]));
         threadStatus[i] = 0;
         // checkRCAndExitProcess("Test cancellation request ",1);// Test point
