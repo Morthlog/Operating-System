@@ -58,7 +58,6 @@ void freeMainResources();
 void cancelThreads();
 static void destructor(void *args);
 static void cleanupUnlockMutex(void *p);
-
 typedef struct destructorArgs
 {
     unsigned int id;
@@ -199,17 +198,17 @@ void *customer(void *x)
     checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_lock", pthread_mutex_lock(&ovenMtx));
     pthread_cleanup_push(cleanupUnlockMutex, (void *)&ovenMtx);
     while (availableOven < totalPizzas)
-    {    
+    {
         #ifdef EXTRA_DEBUG
         threadSafePrintf(id, selectedPizzaTypes, "Order %d didn't find enough ovens. Waiting...\n", id);
         #endif
-       
+
         checkRCAndExitThread(id, selectedPizzaTypes, "pthread_cond_wait", pthread_cond_wait(&ovenCond, &ovenMtx));
     }
     #ifdef EXTRA_DEBUG
     threadSafePrintf(id, selectedPizzaTypes, "Order %d is in Oven.\n", id);
     #endif
- 
+
     availableOven -= totalPizzas;
     pthread_cleanup_pop(0);
     checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_unlock", pthread_mutex_unlock(&ovenMtx));
@@ -231,10 +230,8 @@ void *customer(void *x)
         #ifdef EXTRA_DEBUG
         threadSafePrintf(id, selectedPizzaTypes, "Order %d can't get a deliverer. Waiting...\n", id);
         #endif
-
         checkRCAndExitThread(id, selectedPizzaTypes, "pthread_cond_wait", pthread_cond_wait(&delivererCond, &delivererMtx));
     }
-
     #ifdef EXTRA_DEBUG
     threadSafePrintf(id, selectedPizzaTypes, "Order %d is being packed.\n", id);
     #endif
@@ -267,7 +264,6 @@ void *customer(void *x)
     checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_lock", pthread_mutex_lock(&totalCoolingMtx));
     pthread_cleanup_push(cleanupUnlockMutex, (void *)&totalCoolingMtx);
     totalTimeCooling += interval;
-
     if (maxTimeCooling < interval)
     {
         maxTimeCooling = interval;
@@ -286,7 +282,6 @@ void *customer(void *x)
     #ifdef EXTRA_DEBUG
     threadSafePrintf(id, selectedPizzaTypes, "Delivery boy from order %d has returned.\n", id);
     #endif
-
     checkRCAndExitThread(id, selectedPizzaTypes, "pthread_mutex_lock", pthread_mutex_lock(&delivererMtx));
     pthread_cleanup_push(cleanupUnlockMutex, (void *)&delivererMtx);
     availableDeliverer += 1;
@@ -546,12 +541,14 @@ int main(int argc, char *argv[])
     {
         threadStatus[i] = -1; // initialize to -1, meaning it's not created yet
     }
+    
+unsigned int randSeed = seed;
     for (int i = 0; i < N; i++)
     {
         ids[i] = i + 1;
         if(i>0)
         {
-            int  randCallTime = rand_r(&seed) % T_orderHigh + T_orderLow;
+            int  randCallTime = rand_r(&randSeed) % T_orderHigh + T_orderLow;
             sleep(randCallTime);
         }
 
@@ -563,7 +560,7 @@ int main(int argc, char *argv[])
         threadStatus[i] = 0;
 
     }
-    
+
     for (int i = 0; i < N; i++)
     {
         checkRCAndExitProcess("pthread_join", pthread_join(threads[i], NULL));
