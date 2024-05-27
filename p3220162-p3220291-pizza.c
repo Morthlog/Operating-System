@@ -367,38 +367,41 @@ void cancelThreads()
     printf("======= MAIN Cancels threads ======= \n");
     #endif
 
-    void *status = NULL;
-    for (int i = 0; i < N; i++)
-    {   
-        #ifdef EXTRA_DEBUG
-        printf("Thread id %d status %d\n",i+1, threadStatus[i]);
-        #endif
-
-        if (threadStatus[i] == 0) // if is created
-        {
-            pthread_cancel(threads[i]);
-        }
-    }
-
-    for (int i = 0; i < N; i++)
+    if (threadStatus != NULL)
     {
-        if (threadStatus[i] == 0)
-        {
-            checkRCAndExitProcess("pthread_join", pthread_join(threads[i], &status));
-
+        void *status = NULL;
+        for (int i = 0; i < N; i++)
+        {   
             #ifdef EXTRA_DEBUG
-            if (status == PTHREAD_CANCELED)
-            {
-                printf("main(): thread %d was canceled\n", ids[i]);
-            }
-            else
-            {
-                printf("main(): thread %d wasn't canceled)\n", ids[i]);
-            } // maybe it has already finished
+            printf("Thread id %d status %d\n",i+1, threadStatus[i]);
             #endif
+
+            if (threadStatus[i] == 0) // if is created
+            {
+                pthread_cancel(threads[i]);
+            }
+        }
+
+        for (int i = 0; i < N; i++)
+        {
+            if (threadStatus[i] == 0)
+            {
+                checkRCAndExitProcess("pthread_join", pthread_join(threads[i], &status));
+
+                #ifdef EXTRA_DEBUG
+                if (status == PTHREAD_CANCELED)
+                {
+                    printf("main(): thread %d was canceled\n", ids[i]);
+                }
+                else
+                {
+                    printf("main(): thread %d wasn't canceled)\n", ids[i]);
+                } // maybe it has already finished
+                #endif
+            }
         }
     }
-
+   
     freeMainResources();
 }
 
@@ -420,9 +423,20 @@ void freeMainResources()
     checkRCAndExitProcess("pthread_cond_destroy", pthread_cond_destroy(&delivererCond));
     checkRCAndExitProcess("pthread_mutex_destroy", pthread_mutex_destroy(&totalCoolingMtx));
 
-    free(threadStatus);
-    free(threads);
-    free(ids);
+    if (threadStatus != NULL)
+    {
+        free(threadStatus);
+    }
+ 
+    if(threads != NULL)
+    {
+        free(threads);
+    }
+
+    if(ids != NULL)
+    {
+        free(ids);
+    }    
 }
 
 void checkRCAndExitThread(unsigned int id, unsigned int *memoryToFree, const char *type, int rc)
@@ -516,18 +530,6 @@ int main(int argc, char *argv[])
         return -1;
     }
 
-    checkRCAndExitProcess("pthread_mutex_init", pthread_mutex_init(&printMtx, NULL));
-    checkRCAndExitProcess("pthread_mutex_init", pthread_mutex_init(&telOperatorMtx, NULL));
-    checkRCAndExitProcess("pthread_cond_init", pthread_cond_init(&telOperatorCond, NULL));
-    checkRCAndExitProcess("pthread_mutex_init", pthread_mutex_init(&totalRevenueMtx, NULL));
-    checkRCAndExitProcess("pthread_mutex_init", pthread_mutex_init(&cookMtx, NULL));
-    checkRCAndExitProcess("pthread_cond_init", pthread_cond_init(&cookCond, NULL));
-    checkRCAndExitProcess("pthread_mutex_init", pthread_mutex_init(&ovenMtx, NULL));
-    checkRCAndExitProcess("pthread_cond_init", pthread_cond_init(&ovenCond, NULL));
-    checkRCAndExitProcess("pthread_mutex_init", pthread_mutex_init(&delivererMtx, NULL));
-    checkRCAndExitProcess("pthread_cond_init", pthread_cond_init(&delivererCond, NULL));
-    checkRCAndExitProcess("pthread_mutex_init", pthread_mutex_init(&totalCoolingMtx, NULL));
-
     threadStatus = malloc(N * sizeof(int));
     if (threadStatus == NULL)
     {
@@ -541,8 +543,21 @@ int main(int argc, char *argv[])
     {
         threadStatus[i] = -1; // initialize to -1, meaning it's not created yet
     }
+    checkRCAndExitProcess("pthread_mutex_init", pthread_mutex_init(&printMtx, NULL));
+    checkRCAndExitProcess("pthread_mutex_init", pthread_mutex_init(&telOperatorMtx, NULL));
+    checkRCAndExitProcess("pthread_cond_init", pthread_cond_init(&telOperatorCond, NULL));
+    checkRCAndExitProcess("pthread_mutex_init", pthread_mutex_init(&totalRevenueMtx, NULL));
+    checkRCAndExitProcess("pthread_mutex_init", pthread_mutex_init(&cookMtx, NULL));
+    checkRCAndExitProcess("pthread_cond_init", pthread_cond_init(&cookCond, NULL));
+    checkRCAndExitProcess("pthread_mutex_init", pthread_mutex_init(&ovenMtx, NULL));
+    checkRCAndExitProcess("pthread_cond_init", pthread_cond_init(&ovenCond, NULL));
+    checkRCAndExitProcess("pthread_mutex_init", pthread_mutex_init(&delivererMtx, NULL));
+    checkRCAndExitProcess("pthread_cond_init", pthread_cond_init(&delivererCond, NULL));
+    checkRCAndExitProcess("pthread_mutex_init", pthread_mutex_init(&totalCoolingMtx, NULL));
+
+   
     
-unsigned int randSeed = seed;
+    unsigned int randSeed = seed;
     for (int i = 0; i < N; i++)
     {
         ids[i] = i + 1;
