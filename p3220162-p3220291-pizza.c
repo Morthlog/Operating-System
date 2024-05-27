@@ -530,18 +530,6 @@ int main(int argc, char *argv[])
         return -1;
     }
 
-    checkRCAndExitProcess("pthread_mutex_init", pthread_mutex_init(&printMtx, NULL));
-    checkRCAndExitProcess("pthread_mutex_init", pthread_mutex_init(&telOperatorMtx, NULL));
-    checkRCAndExitProcess("pthread_cond_init", pthread_cond_init(&telOperatorCond, NULL));
-    checkRCAndExitProcess("pthread_mutex_init", pthread_mutex_init(&totalRevenueMtx, NULL));
-    checkRCAndExitProcess("pthread_mutex_init", pthread_mutex_init(&cookMtx, NULL));
-    checkRCAndExitProcess("pthread_cond_init", pthread_cond_init(&cookCond, NULL));
-    checkRCAndExitProcess("pthread_mutex_init", pthread_mutex_init(&ovenMtx, NULL));
-    checkRCAndExitProcess("pthread_cond_init", pthread_cond_init(&ovenCond, NULL));
-    checkRCAndExitProcess("pthread_mutex_init", pthread_mutex_init(&delivererMtx, NULL));
-    checkRCAndExitProcess("pthread_cond_init", pthread_cond_init(&delivererCond, NULL));
-    checkRCAndExitProcess("pthread_mutex_init", pthread_mutex_init(&totalCoolingMtx, NULL));
-
     threadStatus = malloc(N * sizeof(int));
     if (threadStatus == NULL)
     {
@@ -555,6 +543,19 @@ int main(int argc, char *argv[])
     {
         threadStatus[i] = -1; // initialize to -1, meaning it's not created yet
     }
+    checkRCAndExitProcess("pthread_mutex_init", pthread_mutex_init(&printMtx, NULL));
+    checkRCAndExitProcess("pthread_mutex_init", pthread_mutex_init(&telOperatorMtx, NULL));
+    checkRCAndExitProcess("pthread_cond_init", pthread_cond_init(&telOperatorCond, NULL));
+    checkRCAndExitProcess("pthread_mutex_init", pthread_mutex_init(&totalRevenueMtx, NULL));
+    checkRCAndExitProcess("pthread_mutex_init", pthread_mutex_init(&cookMtx, NULL));
+    checkRCAndExitProcess("pthread_cond_init", pthread_cond_init(&cookCond, NULL));
+    checkRCAndExitProcess("pthread_mutex_init", pthread_mutex_init(&ovenMtx, NULL));
+    checkRCAndExitProcess("pthread_cond_init", pthread_cond_init(&ovenCond, NULL));
+    checkRCAndExitProcess("pthread_mutex_init", pthread_mutex_init(&delivererMtx, NULL));
+    checkRCAndExitProcess("pthread_cond_init", pthread_cond_init(&delivererCond, NULL));
+    checkRCAndExitProcess("pthread_mutex_init", pthread_mutex_init(&totalCoolingMtx, NULL));
+
+   
     
     unsigned int randSeed = seed;
     for (int i = 0; i < N; i++)
