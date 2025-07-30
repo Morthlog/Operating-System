@@ -51,3 +51,6 @@ If any thread fails at any point, we make sure we free the resources it occupied
 <a href="https://github.com/Morthlog/Operating-System/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=Morthlog/Operating-System"/>
 </a>
+
+- [Babis Drosatos](https://github.com/BabisDros)
+- [Iosif Petroulakis](https://github.com/Morthlog)
